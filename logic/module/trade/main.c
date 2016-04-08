@@ -1,8 +1,22 @@
 #include "/rc/rpc/trade.h"
 #include <user_key.h>
 #include <module.h>
+#include <var_prop.h>
+
+#define TRADEORDER_OWNEROBJECT(data) data["ownerobject"]
+#define TRADEORDER_OTHERUID(data)	data["otheruid"]
+#define TRADEORDER_OWNERCAR(data)	data["ownercar"]
+#define TRADEORDER_OTHERCAR(data)	data["othercar"]
+
+//MEMORY_VAR(TradeOrder,{}) 
+mapping TradeOrder={};
 
 static object logger;
+
+int IsExistTradeOrder(mixed key)
+{
+	return !undefinedp(TradeOrder[key]);
+}
 
 mapping str2map(string str)
 {
@@ -40,9 +54,23 @@ void remote_passiver_cancel_trade(int activer_uid, int result)
 	rpc_client_activer_require_trade(activer_uid, result);
 }
 
-void remote_passiver_require_trade(int activer_uid, int result) 
+void remote_passiver_require_trade(int activer_uid, int passiver_uid, int result) 
 {
 	logger->Log(activer_uid, "trade.main.remote_passiver_require_trade", "uid:[%d] require trade result:%d", activer_uid,result);
+	object activer_user=get_user(activer_uid);
+	mapping map={};
+	if(result==1)
+	{
+		if(!IsExistTradeOrder(activer_uid))
+		{
+			TradeOrder[activer_uid]={};
+			map=TradeOrder[activer_uid];
+			TRADEORDER_OWNEROBJECT(map)=activer_user;
+			TRADEORDER_OTHERUID(map)=passiver_uid;
+			TRADEORDER_OWNERCAR(map)={};
+			TRADEORDER_OTHERCAR(map)={};
+		}
+	}
 	rpc_client_activer_require_trade(activer_uid, result);
 }
 
@@ -62,15 +90,94 @@ void remote_activer_require_trade(int passiver_uid, int activer_uid, string acti
 
 void passiver_require_trade(object passiver_user, int activer_uid, int result)
 {
+	mapping map={};
 	object activer_user=get_user(activer_uid);
-	if(objectp(activer_user))
+	int passiver_uid=passiver_user->GetId();
+	if(result==1)
 	{
+		if(!IsExistTradeOrder(passiver_uid))
+		{
+			TradeOrder[passiver_uid]={};
+			map=TradeOrder[passiver_uid];
+			TRADEORDER_OWNEROBJECT(map)=passiver_user;
+			TRADEORDER_OTHERUID(map)=activer_uid;
+			TRADEORDER_OWNERCAR(map)={};
+			TRADEORDER_OTHERCAR(map)={};
+		}
+	}
+	if(objectp(activer_user)&&(result==1))
+	{
+			if(!IsExistTradeOrder(activer_uid))
+			{
+				TradeOrder[activer_uid]={};
+				map=TradeOrder[activer_uid];
+				TRADEORDER_OWNEROBJECT(map)=activer_user;
+				TRADEORDER_OTHERUID(map)=passiver_uid;
+				TRADEORDER_OWNERCAR(map)={};
+				TRADEORDER_OTHERCAR(map)={};
+			}
 		logger->Log(activer_user->GetId(), "trade.main.passiver_require_trade", "uid:[%d] require trade result:%d", activer_user->GetId(),result);
 		rpc_client_activer_require_trade(activer_uid, result);
 		return ;
 	}
-	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_passiver_require_trade", activer_uid, result);
+	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_passiver_require_trade", activer_uid, passiver_uid, result);
 	"module/internal_call"->LogicServerCallByUid(activer_uid, op, 0);
+}
+
+void remote_modified_tradecar(int uid, mapping m)
+{
+	modified_tradecar_t var = new modified_tradecar_t;
+	mapping map={};
+	map=TradeOrder[uid];
+	if(m["op"]==-1)
+	{
+		if(map["othercar"][m["type"]]>=m["count"])
+		{
+			map["othercar"][m["type"]]=map["othercar"][m["type"]]-m["count"];
+		}
+		else
+		{}
+	}
+	if(m["op"]==1)
+	{
+		map["othercar"][m["type"]]=map["othercar"][m["type"]]+m["count"];
+	}
+	var->op=m["op"];
+	var->type=m["type"];
+	var->count=m["count"];
+	rpc_client_modified_tradecar( uid, var);
+	debug_message("=====uid:%O's=====",uid);
+	debug_message("=====ownercar:%O's=====",map["ownercar"]);
+	debug_message("=====othercar:%O's=====",map["othercar"]);
+}
+
+void modified_tradecar(int uid, modified_tradecar_t data)
+{
+	mapping map={};
+	mapping m={};
+	m["op"]=data->op;
+	m["type"]=data->type;
+	m["count"]=data->count;
+	map=TradeOrder[uid];
+
+	if(m["op"]==-1)
+	{
+		if(map["ownercar"][m["tpye"]]>=m["count"])
+		{
+			map["ownercar"][m["type"]]=map["ownercar"][m["type"]]-m["count"];
+		}
+		else
+		{}
+	}
+	if(m["op"]==1)
+	{
+		map["ownercar"][m["type"]]=map["ownercar"][m["type"]]+m["count"];
+	}
+	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_modified_tradecar", map["otheruid"], m);
+	"module/internal_call"->LogicServerCallByUid( map["otheruid"], op, 0);
+	debug_message("=====uid:%O's=====",uid);
+	debug_message("=====ownercar:%O's=====",map["ownercar"]);
+	debug_message("=====othercar:%O's=====",map["othercar"]);
 }
 
 void tradecar_distributing(object user, mapping map)

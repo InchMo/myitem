@@ -1,4 +1,10 @@
 imp module.trade.protocol{
+class modified_tradecar_t
+{
+	int op;
+	string type;
+	int count;
+}
 
 void rpc_server_activer_require_trade(object activer_user, int passiver_uid);
 
@@ -7,6 +13,10 @@ void rpc_client_activer_require_trade(int activer_uid, int result);
 void rpc_client_passiver_require_trade(int passiver_uid, int activer__uid, string activer_name);
 
 void rpc_server_passiver_require_trade(object passiver_user, int activer_uid, int result);
+
+void rpc_server_modified_tradecar(object user, modified_tradecar_t data);
+	
+void rpc_client_modified_tradecar(int uid , modified_tradecar_t data);
 
 void rpc_server_sure_trade(object user, int target, string tradecar);
 
