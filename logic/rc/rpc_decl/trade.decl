@@ -16,8 +16,18 @@ void rpc_server_require_trade_result(object passiver_user, int activer_uid, int 
 
 void rpc_server_modified_tradecar(object user, modified_tradecar_t data);
 	
-void rpc_client_modified_tradecar(int uid , modified_tradecar_t data);
+void rpc_client_other_modified_tradecar(int uid , modified_tradecar_t data);
 
-void rpc_server_agree_trade(object user, int target, string tradecar);
+void rpc_server_lock_tradecar(object user);
+	
+void rpc_client_other_lock_tradecar(int uid);
+
+void rpc_server_sure_trade(object user);
+
+void rpc_client_success_trade(int uid);
+
+void rpc_server_cancel_trade(object user);
+
+void rpc_client_cancel_trade(int uid);
 
 }

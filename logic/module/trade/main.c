@@ -3,12 +3,16 @@
 #include <module.h>
 #include <var_prop.h>
 
-#define TRADEORDER_OWNEROBJECT(data) data["ownerobject"]
-#define TRADEORDER_OTHERUID(data)	data["otheruid"]
-#define TRADEORDER_OWNERCAR(data)	data["ownercar"]
-#define TRADEORDER_OTHERCAR(data)	data["othercar"]
-#define TRADEORDER_OWNERLOCK(data)	data["ownerlock"]
-#define TRADEORDER_OTHERLOCK(data)	data["otherlock"]
+#define TRADEORDER_OWNEROBJECT(data)		data["ownerobject"]
+#define TRADEORDER_OTHERUID(data)			data["otheruid"]
+#define TRADEORDER_OWNERCAR(data)			data["ownercar"]
+#define TRADEORDER_OTHERCAR(data)			data["othercar"]
+#define TRADEORDER_OWNERLOCK(data)			data["ownerlock"]
+#define TRADEORDER_OTHERLOCK(data)			data["otherlock"]
+#define TRADEORDER_OWNERSURETRADE(data)		data["ownersuretrade"]
+#define TRADEORDER_OTHERSURETRADE(data)		data["othersuretrade"]
+#define TRADEORDER_OWNERCANCELTRADE(data)	data["ownercanceltrade"]
+#define TRADEORDER_OTHERCANCELTRADE(data)	data["othercanceltrade"]
 
 //MEMORY_VAR(TradeOrder,{}) 
 mapping TradeOrder={};
@@ -42,18 +46,34 @@ void require_trade(object activer_user, int passiver_uid)
 	logger->Log(activer_user->GetId(), "trade.main.activer_require_trade", "uid:[%d] require trade to uid:[%d]", activer_user->GetId(), passiver_uid);
 	object passiver_user=get_user(passiver_uid);	
 	if(objectp(passiver_user))
-	{
-		rpc_client_require_trade(passiver_uid, activer_user->GetId(), activer_user->GetName());
+	{ rpc_client_require_trade(passiver_uid, activer_user->GetId(), activer_user->GetName());
 		return ;
 	}
 	mapping op="/module/internal_call"->PackCallOp(__FILE__, "remote_require_trade", passiver_uid,  activer_user->GetId(), activer_user->GetName());
 	"/module/internal_call"->LogicServerCallByUid(passiver_uid, op, 0);
 }
 
-void remote_cancel_trade(int activer_uid, int result) 
+void remote_other_cancel_trade(int uid)
 {
-	logger->Log(activer_uid, "trade.main.remote_cancel_trade", "uid:[%d] require trade result:%d", activer_uid,result);
-	rpc_client_require_trade_result(activer_uid, result);
+	rpc_client_cancel_trade(uid);
+	map_delete(TradeOrder, uid);
+}
+
+void cancel_trade(object user)
+{
+	int owner_uid=user->GetId();
+	mapping owner_map=TradeOrder[owner_uid];
+	int other_uid=TRADEORDER_OTHERUID(owner_map);
+	object other_user=get_user(other_uid);
+	map_delete(TradeOrder,owner_uid);
+	if(objectp(other_user))
+	{
+		rpc_client_cancel_trade(owner_uid);
+		map_delete(TradeOrder,other_uid);
+		return ;
+	}
+	mapping op="/module/internal_call"->PackCallOp(__FILE__, "remote_other_cancel_trade",other_uid);
+	"/module/internal_call"->LogicServerCallByUid(other_uid, op, 0);
 }
 
 void remote_require_trade_result(int activer_uid, int passiver_uid, int result) 
@@ -129,8 +149,7 @@ void require_trade_result(object passiver_user, int activer_uid, int result)
 void remote_modified_tradecar(int uid, mapping m)
 {
 	modified_tradecar_t var = new modified_tradecar_t;
-	mapping map={};
-	map=TradeOrder[uid];
+	mapping map=TradeOrder[uid];
 	if(m["op"]==-1)
 	{
 		if(map["othercar"][m["type"]]>=m["count"])
@@ -147,7 +166,7 @@ void remote_modified_tradecar(int uid, mapping m)
 	var->op=m["op"];
 	var->type=m["type"];
 	var->count=m["count"];
-	rpc_client_modified_tradecar( uid, var);
+	rpc_client_other_modified_tradecar( uid, var);
 	debug_message("=====uid:%O's=====",uid);
 	debug_message("=====ownercar:%O's=====",map["ownercar"]);
 	debug_message("=====othercar:%O's=====",map["othercar"]);
@@ -155,97 +174,182 @@ void remote_modified_tradecar(int uid, mapping m)
 
 void modified_tradecar(int uid, modified_tradecar_t data)
 {
-	mapping map={};
+	mapping owner_map=TradeOrder[uid];
+	int other_uid=TRADEORDER_OTHERUID(owner_map);
+	object other_user=get_user(other_uid);
 	mapping m={};
 	m["op"]=data->op;
 	m["type"]=data->type;
 	m["count"]=data->count;
-	map=TradeOrder[uid];
 
 	if(m["op"]==-1)
 	{
-		if(map["ownercar"][m["tpye"]]>=m["count"])
+		if(owner_map["ownercar"][m["tpye"]]>=m["count"])
 		{
-			map["ownercar"][m["type"]]=map["ownercar"][m["type"]]-m["count"];
+			owner_map["ownercar"][m["type"]]=owner_map["ownercar"][m["type"]]-m["count"];
 		}
 		else
 		{}
 	}
 	if(m["op"]==1)
 	{
-		map["ownercar"][m["type"]]=map["ownercar"][m["type"]]+m["count"];
+		owner_map["ownercar"][m["type"]]=owner_map["ownercar"][m["type"]]+m["count"];
 	}
-	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_modified_tradecar", map["otheruid"], m);
-	"module/internal_call"->LogicServerCallByUid( map["otheruid"], op, 0);
+	if(objectp(other_user))
+	{
+		modified_tradecar_t var = new modified_tradecar_t;
+		mapping other_map=TradeOrder[other_uid];
+		if(m["op"]==-1)
+		{
+			if(other_map["othercar"][m["tpye"]]>=m["count"])
+			{
+				other_map["othercar"][m["type"]]=other_map["othercar"][m["type"]]-m["count"];
+			}
+			else
+			{}
+		}
+		if(m["op"]==1)
+		{
+			other_map["othercar"][m["type"]]=other_map["othercar"][m["type"]]+m["count"];
+		}
+		var->op=m["op"];
+		var->type=m["type"];
+		var->count=m["count"];
+		rpc_client_other_modified_tradecar( other_uid, var);
+		return ;
+	}
+	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_modified_tradecar", owner_map["otheruid"], m);
+	"module/internal_call"->LogicServerCallByUid( owner_map["otheruid"], op, 0);
 	debug_message("=====uid:%O's=====",uid);
-	debug_message("=====ownercar:%O's=====",map["ownercar"]);
-	debug_message("=====othercar:%O's=====",map["othercar"]);
+	debug_message("=====ownercar:%O's=====",owner_map["ownercar"]);
+	debug_message("=====othercar:%O's=====",owner_map["othercar"]);
 }
 
-void tradecar_distributing(object user, mapping map)
+void remote_other_lock_tradecar(int uid)
 {
-	string key,value;
-	int mount;
-	foreach(key,value in map)
+	debug_message("=====remote_other_lock_tradecar()====");
+	mapping map=TradeOrder[uid];
+	TRADEORDER_OTHERLOCK(map)=1;
+	rpc_client_other_lock_tradecar(uid);
+}
+
+void lock_tradecar(object user)
+{
+	debug_message("====lock_tradecar()====");
+	mapping ownermap=TradeOrder[user->GetId()];
+	int other_uid=TRADEORDER_OTHERUID(ownermap);
+	object other_user=get_user(other_uid);
+
+	TRADEORDER_OWNERLOCK(ownermap)=1;
+
+	if(!objectp(other_user))
 	{
-			mount=atoi(value);
+		mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_other_lock_tradecar",other_uid);
+		"module/internal_call"->LogicServerCallByUid(other_uid, op, 0);
+		return ;
+	}	
+	mapping othermap=TradeOrder[other_uid];
+	TRADEORDER_OTHERLOCK(othermap)=1;
+	rpc_client_other_lock_tradecar(other_uid);
+}
+
+void attain_trade(object user)
+{
+	debug_message("====attain_trade()====");
+
+	mapping map=TradeOrder[user->GetId()];
+	mapping ownercar=TRADEORDER_OWNERCAR(map);
+	mapping othercar=TRADEORDER_OTHERCAR(map);
+	string key;
+	int value;
+	foreach(key,value in ownercar)
+	{
 			if (key == I_USER_GOLD)
 			{
-				ModUtil->AddUserGold(user, mount);
-				CmdUser->SendGoldInfo(user);
-				user->TellMe(0, T("金钱%d"),mount);
+				ModUtil->SubUserGold(user, value);
+				user->TellMe(0, T("金钱%d"), value);
 			}
 			if(key == I_USER_FOOD)
 			{
-				ModUtil->AddUserFood(user, mount);
-				CmdUser->SendFoodInfo(user);
-				user->TellMe(0, T("粮食%d"), mount);
+				ModUtil->SubUserFood(user, value);
+				user->TellMe(0, T("粮食%d"), value);
 			}
 			if (key == I_USER_BD_YUANBAO)
 			{
-				ModUtil->AddUserBdYuanbao(user, mount);
-				CmdUser->SendYuanbaoInfo(user);
-				user->TellMe(0, T("元宝%d"), mount);
+				ModUtil->SubUserBdYuanbao(user, value);
+				user->TellMe(0, T("元宝%d"), value);
 			}
 			if (key == I_USER_UB_YUANBAO)
 			{
-				ModUtil->AddUserUbYuanbao(user, mount);
-				CmdUser->SendYuanbaoInfo(user);
-				user->TellMe(0, T("元宝%d"), mount);
+				ModUtil->SubUserUbYuanbao(user, value);
+				user->TellMe(0, T("元宝%d"), value);
+			}
+	}
+	foreach(key,value in othercar)
+	{
+			if (key == I_USER_GOLD)
+			{
+				ModUtil->AddUserGold(user, value);
+				user->TellMe(0, T("金钱%d"), value);
+			}
+			if(key == I_USER_FOOD)
+			{
+				ModUtil->AddUserFood(user, value);
+				user->TellMe(0, T("粮食%d"), value);
+			}
+			if (key == I_USER_BD_YUANBAO)
+			{
+				ModUtil->AddUserBdYuanbao(user, value);
+				user->TellMe(0, T("元宝%d"), value);
+			}
+			if (key == I_USER_UB_YUANBAO)
+			{
+				ModUtil->AddUserUbYuanbao(user, value);
+				user->TellMe(0, T("元宝%d"), value);
 			}
 	}
 }
-void remote_attain_trade(int uid, string tradecar)
-{
-	debug_message("=========remote_attain_trade======");
-	//object user = get_user( uid );
-	//user->AddGold(tradecar->gold);
-	//user->AddFood(tradecar->food);
-	//"cmd/user"->SendGoldInfo(user);
-	//"cmd/user"->SendFoodInfo(user);
-}
 
-void attain_trade(int uid, string tradecar)
+void remote_other_sure_trade(int uid)
 {
-	object user=get_user(uid);
-	mapping mp_tradecar;
-	mp_tradecar=str2map(tradecar);
-	tradecar_distributing(user,mp_tradecar);
-}
+	debug_message("====remote_sure_trade()====");
 
-void agree_trade(object user, int target_id, string tradecar)
-{
-	//debug_message("=========tradecar:%O======",typeof(tradecar));
-	object target_user=get_user(target_id);
-	if(!objectp(target_user))
+	mapping map=TradeOrder[uid];
+	TRADEORDER_OTHERSURETRADE(map)=1;
+	if(TRADEORDER_OWNERSURETRADE(map))
 	{
-		mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_attain_trade", target_id, tradecar);
-		"module/internal_call"->LogicServerCallByUid(target_id, op, 0);
-		debug_message("========!objectp(target_user)=======");
+		rpc_client_success_trade(uid);
+		attain_trade(get_user(uid));
+	}
+}
+
+void sure_trade(object user)
+{
+	debug_message("=====sure_trade()====");
+
+	mapping owner_map=TradeOrder[user->GetId()];
+	int other_uid=TRADEORDER_OTHERUID(owner_map)
+	object other_user=get_user(other_uid);
+	TRADEORDER_OWNERSURETRADE(owner_map)=1;
+
+	if(TRADEORDER_OTHERSURETRADE(owner_map))
+	{
+		rpc_client_success_trade(user->GetId());
+		attain_trade(user);
+
+	}		
+
+	if(objectp(other_user))
+	{
+		mapping other_map=TradeOrder[other_uid];
+		TRADEORDER_OTHERSURETRADE(other_map)=1;
+		if(TRADEORDER_OWNERSURETRADE(other_map))
+			rpc_client_success_trade(other_uid);
 		return ;
 	}
-	debug_message("========sure_trade=======");
-	attain_trade(target_id, tradecar);
+
+	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_other_sure_trade", other_uid);
+	"module/internal_call"->LogicServerCallByUid(other_uid, op, 0);
 }
 
 void create()
