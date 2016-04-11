@@ -7,6 +7,8 @@
 #define TRADEORDER_OTHERUID(data)	data["otheruid"]
 #define TRADEORDER_OWNERCAR(data)	data["ownercar"]
 #define TRADEORDER_OTHERCAR(data)	data["othercar"]
+#define TRADEORDER_OWNERLOCK(data)	data["ownerlock"]
+#define TRADEORDER_OTHERLOCK(data)	data["otherlock"]
 
 //MEMORY_VAR(TradeOrder,{}) 
 mapping TradeOrder={};
@@ -35,28 +37,28 @@ mapping str2map(string str)
 }
 
 
-void activer_require_trade(object activer_user, int passiver_uid)
+void require_trade(object activer_user, int passiver_uid)
 {
 	logger->Log(activer_user->GetId(), "trade.main.activer_require_trade", "uid:[%d] require trade to uid:[%d]", activer_user->GetId(), passiver_uid);
 	object passiver_user=get_user(passiver_uid);	
 	if(objectp(passiver_user))
 	{
-		rpc_client_passiver_require_trade(passiver_uid, activer_user->GetId(), activer_user->GetName());
+		rpc_client_require_trade(passiver_uid, activer_user->GetId(), activer_user->GetName());
 		return ;
 	}
-	mapping op="/module/internal_call"->PackCallOp(__FILE__, "remote_activer_require_trade", passiver_uid,  activer_user->GetId(), activer_user->GetName());
+	mapping op="/module/internal_call"->PackCallOp(__FILE__, "remote_require_trade", passiver_uid,  activer_user->GetId(), activer_user->GetName());
 	"/module/internal_call"->LogicServerCallByUid(passiver_uid, op, 0);
 }
 
-void remote_passiver_cancel_trade(int activer_uid, int result) 
+void remote_cancel_trade(int activer_uid, int result) 
 {
-	logger->Log(activer_uid, "trade.main.remote_passiver_cancel_trade", "uid:[%d] require trade result:%d", activer_uid,result);
-	rpc_client_activer_require_trade(activer_uid, result);
+	logger->Log(activer_uid, "trade.main.remote_cancel_trade", "uid:[%d] require trade result:%d", activer_uid,result);
+	rpc_client_require_trade_result(activer_uid, result);
 }
 
-void remote_passiver_require_trade(int activer_uid, int passiver_uid, int result) 
+void remote_require_trade_result(int activer_uid, int passiver_uid, int result) 
 {
-	logger->Log(activer_uid, "trade.main.remote_passiver_require_trade", "uid:[%d] require trade result:%d", activer_uid,result);
+	logger->Log(activer_uid, "trade.main.remote_require_trade_result", "uid:[%d] require trade result:%d", activer_uid,result);
 	object activer_user=get_user(activer_uid);
 	mapping map={};
 	if(result==1)
@@ -71,24 +73,24 @@ void remote_passiver_require_trade(int activer_uid, int passiver_uid, int result
 			TRADEORDER_OTHERCAR(map)={};
 		}
 	}
-	rpc_client_activer_require_trade(activer_uid, result);
+	rpc_client_require_trade_result(activer_uid, result);
 }
 
 
-void remote_activer_require_trade(int passiver_uid, int activer_uid, string activer_name)
+void remote_require_trade(int passiver_uid, int activer_uid, string activer_name)
 {
 	object passiver_user=get_user(passiver_uid);
 	if(!objectp(passiver_user))
 	{
 		int result=-1;
-		mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_passiver_cancel_trade", activer_uid, result);
+		mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_cancel_trade", activer_uid, result);
 		"module/internal_call"->LogicServerCallByUid(activer_uid, op, 0);
 	}
-	rpc_client_passiver_require_trade(passiver_uid, activer_uid, activer_name);
+	rpc_client_require_trade(passiver_uid, activer_uid, activer_name);
 } 
 
 
-void passiver_require_trade(object passiver_user, int activer_uid, int result)
+void require_trade_result(object passiver_user, int activer_uid, int result)
 {
 	mapping map={};
 	object activer_user=get_user(activer_uid);
@@ -117,10 +119,10 @@ void passiver_require_trade(object passiver_user, int activer_uid, int result)
 				TRADEORDER_OTHERCAR(map)={};
 			}
 		logger->Log(activer_user->GetId(), "trade.main.passiver_require_trade", "uid:[%d] require trade result:%d", activer_user->GetId(),result);
-		rpc_client_activer_require_trade(activer_uid, result);
+		rpc_client_require_trade_result(activer_uid, result);
 		return ;
 	}
-	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_passiver_require_trade", activer_uid, passiver_uid, result);
+	mapping op="module/internal_call"->PackCallOp(__FILE__, "remote_require_trade_result", activer_uid, passiver_uid, result);
 	"module/internal_call"->LogicServerCallByUid(activer_uid, op, 0);
 }
 
@@ -231,7 +233,7 @@ void attain_trade(int uid, string tradecar)
 	tradecar_distributing(user,mp_tradecar);
 }
 
-void sure_trade(object user, int target_id, string tradecar)
+void agree_trade(object user, int target_id, string tradecar)
 {
 	//debug_message("=========tradecar:%O======",typeof(tradecar));
 	object target_user=get_user(target_id);
