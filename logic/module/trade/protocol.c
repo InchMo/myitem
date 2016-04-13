@@ -1,4 +1,6 @@
 #include "/rc/rpc/trade.h"
+#include "/module/trade/trade.h"
+
 
 void rpc_server_require_trade(object activer_user, int passiver_uid)
 {
@@ -33,7 +35,7 @@ void rpc_server_sure_trade(object user)
 	"module/trade/main"->sure_trade(user);
 }
 
-void rpc_server_cancel_trade(object user)
+void rpc_server_cancel_trade(object user, string reason)
 {
-	"module/trade/main"->cancel_trade(user);
+	"module/trade/main"->cancel_trade(user, reason);
 }

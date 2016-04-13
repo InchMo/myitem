@@ -26,8 +26,8 @@ void rpc_server_sure_trade(object user);
 
 void rpc_client_success_trade(int uid);
 
-void rpc_server_cancel_trade(object user);
+void rpc_server_cancel_trade(object user, string reason);
 
-void rpc_client_cancel_trade(int uid);
+void rpc_client_cancel_trade(int uid, string reason);
 
 }
